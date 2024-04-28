@@ -13,11 +13,12 @@ from propelauth_fastapi import init_auth, User as PropelUser
 from typing import List
 from dotenv import load_dotenv
 import uvicorn
-from models import TrashPostPublic, TrashPostDetails, RewardDetails
+from models import TrashPostPublic, TrashPostDetails, RewardDetails, PostCreationResponse
 from gemini import GeminiAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.dialects.postgresql import JSON
 import re
+from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
@@ -53,6 +54,9 @@ auth = init_auth(auth_url, api_key)
 
 app = FastAPI()
 
+app.mount("/public", StaticFiles(directory="public"), name="public")
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -68,25 +72,24 @@ def get_db():
     finally:
         db.close()
 
-@app.post("/trash-posts/", response_model=int)
+@app.post("/trash-posts/", response_model=PostCreationResponse)
 def create_trash_post(image: UploadFile = File(...), db: Session = Depends(get_db), current_user: PropelUser = Depends(auth.require_user)):
-    file_path = f"public/{datetime.utcnow().isoformat()}_{image.filename}"
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    file_directory = "public"
+    os.makedirs(file_directory, exist_ok=True)
+    file_path = f"{file_directory}/{datetime.utcnow().isoformat()}_{image.filename}"
+
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(image.file, buffer)
-
     gemini_api = GeminiAPI(file_path)
     gemini_response = gemini_api.generate_content()
-    reward_points = gemini_response["reward"]
+    print("content:: ", gemini_response)
 
-    db_post = TrashPost(image_before_url=file_path, user_id=current_user.user_id, details=gemini_response, reward_points=reward_points)
-    result = update_or_create_user_points(current_user, reward_points, db)
-    print("Result: ", result)
+    db_post = TrashPost(image_before_url=file_path, user_id=current_user.user_id, details=gemini_response)
 
     db.add(db_post)
     db.commit()
     db.refresh(db_post)
-    return db_post.id
+    return PostCreationResponse(post_id=db_post.id, gemini_response=gemini_response)
 
 @app.put("/trash-posts/{post_id}/clean", response_model=bool)
 def update_trash_post(post_id: int, db: Session = Depends(get_db), current_user: PropelUser = Depends(auth.require_user)):
