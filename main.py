@@ -1,6 +1,6 @@
 import os
 import shutil
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, status, File
+from fastapi import FastAPI, Depends, Form, HTTPException, UploadFile, status, File
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -38,6 +38,8 @@ class TrashPost(Base):
     details = Column(JSON)
     user_id = Column(String, nullable=False)
     reward_points = Column(Integer, default=0)
+    latitude = Column(Float, default=0)
+    longitude = Column(Float, default=0)
 
 class Rewards(Base):
     __tablename__ = "rewards"
@@ -73,7 +75,7 @@ def get_db():
         db.close()
 
 @app.post("/trash-posts/", response_model=PostCreationResponse)
-def create_trash_post(image: UploadFile = File(...), db: Session = Depends(get_db), current_user: PropelUser = Depends(auth.require_user)):
+def create_trash_post(image: UploadFile = File(...),latitude: float = Form(...), longitude: float = Form(...), db: Session = Depends(get_db), current_user: PropelUser = Depends(auth.require_user)):
     file_directory = "public"
     os.makedirs(file_directory, exist_ok=True)
     file_path = f"{file_directory}/{datetime.utcnow().isoformat()}_{image.filename}"
@@ -82,9 +84,14 @@ def create_trash_post(image: UploadFile = File(...), db: Session = Depends(get_d
         shutil.copyfileobj(image.file, buffer)
     gemini_api = GeminiAPI(file_path)
     gemini_response = gemini_api.generate_content()
-    print("content:: ", gemini_response)
+    reward_points = gemini_response["reward"]
 
-    db_post = TrashPost(image_before_url=file_path, user_id=current_user.user_id, details=gemini_response)
+    db_post = TrashPost(image_before_url=file_path, user_id=current_user.user_id, details=gemini_response, reward_points=reward_points)
+    result = update_or_create_user_points(current_user, reward_points, db)
+    print("Result: ", result)
+    print("content::", gemini_response)
+
+    db_post = TrashPost(image_before_url=file_path, user_id=current_user.user_id, details=gemini_response, latitude=latitude, longitude=longitude)
 
     db.add(db_post)
     db.commit()
