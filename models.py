@@ -26,6 +26,7 @@ class TrashPostDetails(BaseModel):
 
 
 class RewardDetails(BaseModel):
+    user_id: str
     username: str
     points: int
 

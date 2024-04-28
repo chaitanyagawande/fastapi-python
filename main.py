@@ -48,6 +48,7 @@ class Rewards(Base):
     username = Column(String, nullable=False)
     points = Column(Integer, default=0)
 
+# Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
 
 auth_url, api_key = os.getenv("AUTH_URL"), os.getenv("API_KEY")
@@ -75,7 +76,7 @@ def get_db():
         db.close()
 
 @app.post("/trash-posts/", response_model=PostCreationResponse)
-def create_trash_post(image: UploadFile = File(...),latitude: float = Form(...), longitude: float = Form(...), db: Session = Depends(get_db), current_user: PropelUser = Depends(auth.require_user)):
+def create_trash_post(image: UploadFile = File(...),db: Session = Depends(get_db), current_user: PropelUser = Depends(auth.require_user)):
     file_directory = "public"
     os.makedirs(file_directory, exist_ok=True)
     file_path = f"{file_directory}/{datetime.utcnow().isoformat()}_{image.filename}"
@@ -91,7 +92,7 @@ def create_trash_post(image: UploadFile = File(...),latitude: float = Form(...),
     print("Result: ", result)
     print("content::", gemini_response)
 
-    db_post = TrashPost(image_before_url=file_path, user_id=current_user.user_id, details=gemini_response, latitude=latitude, longitude=longitude)
+    db_post = TrashPost(image_before_url=file_path, user_id=current_user.user_id, details=gemini_response)
 
     db.add(db_post)
     db.commit()
@@ -122,7 +123,7 @@ def update_or_create_user_points(user: PropelUser, points_to_add, db):
     if user_reward:
         user_reward.points += points_to_add
     else:
-        user_reward = Rewards(user_id=user.user_id, points=points_to_add, username=remove_email_extension(user.email))
+        user_reward = Rewards(user_id=user.user_id, username=remove_email_extension(user.email), points=points_to_add)
         db.add(user_reward)
     db.commit()
     return "Points updated or user created with points"
