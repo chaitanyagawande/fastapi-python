@@ -13,7 +13,7 @@ from propelauth_fastapi import init_auth, User as PropelUser
 from typing import List
 from dotenv import load_dotenv
 import uvicorn
-from models import TrashPostPublic, TrashPostDetails
+from models import TrashPostPublic, TrashPostDetails, RewardDetails
 from gemini import GeminiAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.dialects.postgresql import JSON
@@ -130,6 +130,12 @@ def get_trash_post(post_id: int, db: Session = Depends(get_db), current_user: Pr
     if db_post is None:
         raise HTTPException(status_code=404, detail="Post not found")
     return db_post
+
+@app.get("/rewards/", response_model=List[RewardDetails])
+def get_rewards(db: Session = Depends(get_db), current_user: PropelUser = Depends(auth.require_user)):
+    rewards = db.query(Rewards).order_by(Rewards.points.desc()).all()
+    return rewards
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=5001)

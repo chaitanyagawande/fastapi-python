@@ -24,3 +24,10 @@ class TrashPostDetails(BaseModel):
     class Config:
         orm_mode = True
 
+
+class RewardDetails(BaseModel):
+    username: str
+    points: int
+
+    class Config:
+        orm_mode = True
