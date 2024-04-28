@@ -1,3 +1,4 @@
+from exceptiongroup import catch
 from exif import Image
 import google.generativeai as genai
 import PIL.Image
@@ -61,9 +62,10 @@ class GeminiAPI:
         "Description": A brief summary of what input image is based on location and waste,
         "Type_of_waste": Choose option of type of waste answer from following option (eg. plastic, organic, paper,industrial, household, hazard,chemical,liquid, Mixed etc). If no waste is detected, set this to 'none',
         "location_summary": A very short string describing the location summary based on position & how waste is impacting the environment,
-        "impact": A very short describtion of impact of waste on location & type & quantity of waste(less than 20 words).
+        "impact": A very short describtion of impact of waste on location & type & quantity of waste(less than 20 words),
         "impact_level": A string that rate impact of waste on environment based on surronding such as 'Harmful', 'Moderately Harmful','Less Harmful', 'Potentially Beneficial',
-        "emergency": Identify Priority level like if is a 'cricital','High','Medium','Low','Routine' based on surronding, type of waste & level of waste .
+        "emergency": Identify Priority level like if is a 'cricital','High','Medium','Low','Routine' based on surronding, type of waste & level of waste,
+        "reward": Give a reward score based on impact ,impact_level,emergency out of 100(eg 50),
         "Level_of_waste":  A string that rates the level of waste present such as 'low', 'mid', or 'high'. If no waste is detected, set this to 'none',
         "Nearby_landmarks": Find nearby landmarks based on location relevant to waste disposal (e.g., recycling centers, waste facilities) give response as list of landmarks with estimated distance like ['name':'','distance':'  in miles']. If not found set this to ['none'],
         "people_required": estimated the exact number of people required for cleanup waste based on general government standards,(eg. 3, 4 etc). If not needed set this to 0,
@@ -74,7 +76,8 @@ class GeminiAPI:
             []
             "Additional tips": 3 one line tips.if not needed set empty list.
             []
-        }you should provide actionable cleaning suggestions tailored to the type of waste identified, complete with safety tips and presented in a step-by-step guide format.These suggestions are designed for individuals to perform immediately if needed
+        }
+        you should provide actionable cleaning suggestions tailored to the type of waste identified, complete with safety tips and presented in a step-by-step guide format.These suggestions are designed for individuals to perform immediately if needed
         }
         '''
 
@@ -91,6 +94,15 @@ class GeminiAPI:
         response = model.generate_content([self.prompt, input_img])
         cleaned_text = response.text.replace("```json", "").replace("```", "").strip()
         data = json.loads(cleaned_text)
+
+        image_coordinates = {}
+        try:
+            image_coordinates = self.image_coordinates(self.image_path)
+        except Exception as e:
+            print("Error in getting image coordinates", e)
+
+        print(image_coordinates)
+
         return data
 
     def decimal_coords(self, coords, ref):

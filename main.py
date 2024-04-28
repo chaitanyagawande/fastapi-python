@@ -16,6 +16,7 @@ import uvicorn
 from models import TrashPostPublic, TrashPostCreate
 from gemini import GeminiAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.dialects.postgresql import JSON
 
 load_dotenv()
 
@@ -31,9 +32,10 @@ class TrashPost(Base):
     __tablename__ = "trash_posts"
     id = Column(Integer, primary_key=True, index=True)
     image_before_url = Column(String)
-    image_after_url = Column(String, nullable=True)
     description = Column(String)
     is_cleaned = Column(Boolean, default=False)
+    details = Column(JSON)
+    user_id = Column(String, nullable=False)
 
 Base.metadata.create_all(bind=engine)
 
@@ -65,9 +67,11 @@ def create_trash_post(image: UploadFile = File(...), db: Session = Depends(get_d
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(image.file, buffer)
     gemini_api = GeminiAPI(file_path)
-    print("content:: ", gemini_api.generate_content())
+    gemini_response = gemini_api.generate_content()
+    print("content:: ", gemini_response)
 
-    db_post = TrashPost(image_before_url=file_path, description="Hello World!!")
+    db_post = TrashPost(image_before_url=file_path, user_id=current_user.user_id, details=gemini_response)
+
     db.add(db_post)
     db.commit()
     db.refresh(db_post)
