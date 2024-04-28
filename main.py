@@ -12,10 +12,12 @@ from passlib.context import CryptContext
 from propelauth_fastapi import init_auth, User as PropelUser
 from typing import List
 from dotenv import load_dotenv
+import uvicorn
+from models import TrashPostPublic, TrashPostCreate
+from gemini import GeminiAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
-
-import uvicorn
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
@@ -36,11 +38,18 @@ class TrashPost(Base):
 Base.metadata.create_all(bind=engine)
 
 auth_url, api_key = os.getenv("AUTH_URL"), os.getenv("API_KEY")
-print(auth_url, api_key)
 
 auth = init_auth(auth_url, api_key)
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def get_db():
     db = SessionLocal()
@@ -48,20 +57,6 @@ def get_db():
         yield db
     finally:
         db.close()
-        
-class TrashPostCreate(BaseModel):
-    image_url: str
-    description: str
-
-class TrashPostPublic(BaseModel):
-    id: int
-    image_before_url: str
-    image_after_url: str
-    description: str
-    is_cleaned: bool
-
-    class Config:
-        orm_mode = True
 
 @app.post("/trash-posts/", response_model=int)
 def create_trash_post(image: UploadFile = File(...), db: Session = Depends(get_db), current_user: PropelUser = Depends(auth.require_user)):
@@ -69,6 +64,9 @@ def create_trash_post(image: UploadFile = File(...), db: Session = Depends(get_d
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(image.file, buffer)
+    gemini_api = GeminiAPI(file_path)
+    print("content:: ", gemini_api.generate_content())
+
     db_post = TrashPost(image_before_url=file_path, description="Hello World!!")
     db.add(db_post)
     db.commit()
@@ -90,7 +88,7 @@ def read_trash_posts(is_cleaned: bool = None, db: Session = Depends(get_db), cur
         posts = db.query(TrashPost).all()
     else:
         posts = db.query(TrashPost).filter(TrashPost.is_cleaned == is_cleaned).all()
-    return posts
+    return posts 
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=5001)
