@@ -24,3 +24,7 @@ class TrashPostDetails(BaseModel):
     class Config:
         orm_mode = True
 
+class PostCreationResponse(BaseModel):
+    post_id: int
+    gemini_response: dict  # Assuming gemini_response is a dictionary
+
