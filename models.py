@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 
 class TrashPostCreate(BaseModel):
@@ -7,8 +8,19 @@ class TrashPostCreate(BaseModel):
 class TrashPostPublic(BaseModel):
     id: int
     image_before_url: str
-    description: str
     is_cleaned: bool
+    details: dict
+    user_id: str
+    reward_points: int
 
     class Config:
         orm_mode = True
+
+class TrashPostDetails(BaseModel):
+    id: int
+    image_before_url: str
+    is_cleaned: bool
+    details: dict
+    class Config:
+        orm_mode = True
+

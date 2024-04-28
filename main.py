@@ -13,10 +13,11 @@ from propelauth_fastapi import init_auth, User as PropelUser
 from typing import List
 from dotenv import load_dotenv
 import uvicorn
-from models import TrashPostPublic, TrashPostCreate
+from models import TrashPostPublic, TrashPostDetails
 from gemini import GeminiAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.dialects.postgresql import JSON
+import re
 
 load_dotenv()
 
@@ -32,10 +33,17 @@ class TrashPost(Base):
     __tablename__ = "trash_posts"
     id = Column(Integer, primary_key=True, index=True)
     image_before_url = Column(String)
-    description = Column(String)
     is_cleaned = Column(Boolean, default=False)
     details = Column(JSON)
     user_id = Column(String, nullable=False)
+    reward_points = Column(Integer, default=0)
+
+class Rewards(Base):
+    __tablename__ = "rewards"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, nullable=False)
+    username = Column(String, nullable=False)
+    points = Column(Integer, default=0)
 
 Base.metadata.create_all(bind=engine)
 
@@ -66,11 +74,14 @@ def create_trash_post(image: UploadFile = File(...), db: Session = Depends(get_d
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(image.file, buffer)
+
     gemini_api = GeminiAPI(file_path)
     gemini_response = gemini_api.generate_content()
-    print("content:: ", gemini_response)
+    reward_points = gemini_response["reward"]
 
-    db_post = TrashPost(image_before_url=file_path, user_id=current_user.user_id, details=gemini_response)
+    db_post = TrashPost(image_before_url=file_path, user_id=current_user.user_id, details=gemini_response, reward_points=reward_points)
+    result = update_or_create_user_points(current_user, reward_points, db)
+    print("Result: ", result)
 
     db.add(db_post)
     db.commit()
@@ -92,7 +103,33 @@ def read_trash_posts(is_cleaned: bool = None, db: Session = Depends(get_db), cur
         posts = db.query(TrashPost).all()
     else:
         posts = db.query(TrashPost).filter(TrashPost.is_cleaned == is_cleaned).all()
+    print("Posts: ", posts, len(posts))
+    # print("Current User: ", current_user.user_id, posts[0].id, posts[0].description, posts[0].details, posts[0].image_before_url, posts[0].is_cleaned, posts[0].reward_points)
     return posts 
+
+def update_or_create_user_points(user: PropelUser, points_to_add, db):
+    user_reward = db.query(Rewards).filter(Rewards.user_id == user.user_id).first()
+    if user_reward:
+        user_reward.points += points_to_add
+    else:
+        user_reward = Rewards(user_id=user.user_id, points=points_to_add, username=remove_email_extension(user.email))
+        db.add(user_reward)
+    db.commit()
+    return "Points updated or user created with points"
+
+def remove_email_extension(email):
+    print("Email ", email)
+    pattern = r"@\S+"
+    cleaned_email = re.sub(pattern, "", email)
+    return cleaned_email
+
+@app.get("/trash-posts/{post_id}", response_model=TrashPostDetails)
+def get_trash_post(post_id: int, db: Session = Depends(get_db), current_user: PropelUser = Depends(auth.require_user)):
+    db_post = db.query(TrashPost).filter(TrashPost.id == post_id).first()
+    print("current user: ", current_user.email)
+    if db_post is None:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return db_post
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=5001)
