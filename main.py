@@ -38,8 +38,8 @@ class TrashPost(Base):
     details = Column(JSON)
     user_id = Column(String, nullable=False)
     reward_points = Column(Integer, default=0)
-    latitude = Column(Float, default=0)
-    longitude = Column(Float, default=0)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
 
 class Rewards(Base):
     __tablename__ = "rewards"
@@ -76,14 +76,14 @@ def get_db():
         db.close()
 
 @app.post("/trash-posts/", response_model=PostCreationResponse)
-def create_trash_post(image: UploadFile = File(...),db: Session = Depends(get_db), current_user: PropelUser = Depends(auth.require_user)):
+def create_trash_post(latitude: float = Form(...), longitude: float = Form(...), image: UploadFile = File(...), db: Session = Depends(get_db), current_user: PropelUser = Depends(auth.require_user)):
     file_directory = "public"
     os.makedirs(file_directory, exist_ok=True)
     file_path = f"{file_directory}/{datetime.utcnow().isoformat()}_{image.filename}"
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(image.file, buffer)
-    gemini_api = GeminiAPI(file_path)
+    gemini_api = GeminiAPI(file_path, latitude, longitude)
     gemini_response = gemini_api.generate_content()
     reward_points = gemini_response["reward"]
 
@@ -93,6 +93,8 @@ def create_trash_post(image: UploadFile = File(...),db: Session = Depends(get_db
     print("content::", gemini_response)
 
     db_post = TrashPost(image_before_url=file_path, user_id=current_user.user_id, details=gemini_response)
+    result = update_or_create_user_points(current_user, gemini_response["reward"], db)
+    print("Result: ", result)
 
     db.add(db_post)
     db.commit()
@@ -147,6 +149,12 @@ def get_rewards(db: Session = Depends(get_db), current_user: PropelUser = Depend
     rewards = db.query(Rewards).order_by(Rewards.points.desc()).all()
     return rewards
 
+@app.get("/locations/", response_model=list)
+def get_rewards(db: Session = Depends(get_db), current_user: PropelUser = Depends(auth.require_user)):
+    coordinates = db.query(
+        TrashPost.latitude, TrashPost.longitude
+    ).distinct().all()
+    return [{"latitude": lat, "longitude": lng} for lat, lng in coordinates]
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=5001)
