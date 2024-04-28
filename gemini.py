@@ -11,8 +11,11 @@ load_dotenv()
 
 class GeminiAPI:
 
-    def __init__(self, path) -> None:
+    def __init__(self, path, latitude, longitude) -> None:
         self.image_path = path
+        self.latitude = latitude
+        self.longitude = longitude
+
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
         self.generation_config = {
@@ -52,9 +55,10 @@ class GeminiAPI:
 
         self.prompt = '''
         Anaylse Image & location
-        location :  "position": {
-                        "lat": 45.51999,
-                        "lng": -122.68005}
+        location : {
+            "lat": {self.latitude},
+            "lng": {self.longitude}
+        }
         generate response like a Example below:
         example :
         Provide the response in JSON format with the following fields:
@@ -80,6 +84,7 @@ class GeminiAPI:
         you should provide actionable cleaning suggestions tailored to the type of waste identified, complete with safety tips and presented in a step-by-step guide format.These suggestions are designed for individuals to perform immediately if needed
         }
         '''
+        self.prompt=self.prompt.replace("{self.latitude}", str(self.latitude)).replace("{self.longitude}", str(self.longitude))
 
     def generate_content(self):
         model = genai.GenerativeModel(
