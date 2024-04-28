@@ -84,7 +84,12 @@ def create_trash_post(latitude: float = Form(...), longitude: float = Form(...),
         shutil.copyfileobj(image.file, buffer)
     gemini_api = GeminiAPI(file_path, latitude, longitude)
     gemini_response = gemini_api.generate_content()
-    print("content:: ", gemini_response)
+    reward_points = gemini_response["reward"]
+
+    db_post = TrashPost(image_before_url=file_path, user_id=current_user.user_id, details=gemini_response, reward_points=reward_points)
+    result = update_or_create_user_points(current_user, reward_points, db)
+    print("Result: ", result)
+    print("content::", gemini_response)
 
     db_post = TrashPost(image_before_url=file_path, user_id=current_user.user_id, details=gemini_response, latitude=latitude, longitude=longitude)
     result = update_or_create_user_points(current_user, gemini_response["reward"], db)
